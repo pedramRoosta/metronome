@@ -1,115 +1,191 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:just_audio/just_audio.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+void main() => runApp(const MyApp());
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+    return const MaterialApp(
+      title: 'Metronome',
+      home: MetronomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class MetronomePage extends StatefulWidget {
+  const MetronomePage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<MetronomePage> createState() => _MetronomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _MetronomePageState extends State<MetronomePage> {
+  final AudioPlayer _playerDown = AudioPlayer();
+  final AudioPlayer _playerUp = AudioPlayer();
+  final textCtrl = TextEditingController();
+  double minBpm = 60;
+  double maxBpm = 240;
+  int _bpm = 120;
+  int index = 1;
+  bool _playing = false;
+  Timer? _timer;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  @override
+  void initState() {
+    super.initState();
+    _playerDown.setAsset('assets/audio/up.mp3');
+    _playerUp.setAsset('assets/audio/down.mp3');
+  }
+
+  @override
+  void dispose() {
+    _playerDown.dispose();
+    _playerUp.dispose();
+    super.dispose();
+  }
+
+  void _startStop() async {
+    if (_playing) {
+      setState(() {
+        _timer?.cancel();
+        _playing = false;
+        index = 1;
+      });
+    } else {
+      _playing = true;
+      changeBpm();
+    }
+  }
+
+  void changeBpm() {
+    _timer?.cancel();
+    final interval = ((60 / _bpm) * 1000).floor().toInt();
+    index = 1;
+    _timer = Timer.periodic(Duration(milliseconds: interval), (_) async {
+      if (index < 4) {
+        await _playerDown.seek(Duration.zero);
+        await _playerDown.play();
+        index++;
+      } else {
+        await _playerUp.seek(Duration.zero);
+        await _playerUp.play();
+        index = 1;
+      }
     });
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final color = Theme.of(context).primaryColorDark;
     return Scaffold(
       appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('Metronome'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: Container(
+        margin: const EdgeInsets.only(top: 20),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
             Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+              'BPM: $_bpm',
+              style: const TextStyle(fontSize: 24),
+            ),
+            const SizedBox(height: 20),
+            const SizedBox(height: 20),
+            Slider(
+              value: _bpm.toDouble(),
+              min: minBpm,
+              max: maxBpm,
+              divisions: 60,
+              onChanged: (double value) {
+                setState(() {
+                  _bpm = value.toInt();
+                });
+              },
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(right: 10),
+                  child: const Text('Snap every'),
+                ),
+                SizedBox(
+                  width: 60,
+                  height: 50,
+                  child: TextField(
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    decoration: const InputDecoration(
+                        border: OutlineInputBorder(), counterText: ''),
+                    controller: textCtrl,
+                    maxLength: 3,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.only(left: 10),
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          final snapValue = int.parse(textCtrl.text);
+                          final finalBpm = _bpm + snapValue;
+                          if (finalBpm <= maxBpm) {
+                            setState(() {
+                              _bpm = finalBpm;
+                            });
+                            changeBpm();
+                          }
+                        },
+                        child: Icon(
+                          Icons.arrow_upward,
+                          size: 50,
+                          color: color,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          final snapValue = int.parse(textCtrl.text);
+                          final finalBpm = _bpm - snapValue;
+                          if (finalBpm >= minBpm) {
+                            setState(() {
+                              _bpm = finalBpm;
+                            });
+                            changeBpm();
+                          }
+                        },
+                        child: Icon(
+                          Icons.arrow_downward,
+                          color: color,
+                          size: 50,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              ],
+            ),
+            SizedBox(
+              width: MediaQuery.of(context).size.width - 50,
+              height: 70,
+              child: ElevatedButton(
+                onPressed: _startStop,
+                child: Text(
+                  _playing ? 'Stop' : 'Start',
+                  style: const TextStyle(fontSize: 24),
+                ),
+              ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
